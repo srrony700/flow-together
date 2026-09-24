@@ -30,6 +30,7 @@ import {
   fieldLabel,
   isContainer,
   isOptionField,
+  parseStoredUpload,
   toDateInputValue,
   type FieldConstraints,
   type FormErrors,
@@ -58,6 +59,11 @@ export interface FormRendererProps {
    * control that cannot work. Omitting it is a deliberate, supported state.
    */
   onUploadFile?: (field: FormField, file: File) => Promise<string>;
+  /**
+   * Download URL for a stored upload. Needed on a later task: the attachment lives
+   * on the task that received the file, not on the one displaying it.
+   */
+  fileUrl?: (field: FormField, value: unknown) => string | undefined;
   /**
    * Resolves `people` and `functional-group` fields against the identity store
    * (FR-W.5). Absent where the deployment runs no IDM — the fields then take a typed
@@ -96,6 +102,7 @@ export function FormRenderer({
   onChange,
   onBlur,
   onUploadFile,
+  fileUrl,
   identityLookup,
   id,
   onSubmit,
@@ -111,6 +118,7 @@ export function FormRenderer({
     onChange,
     onBlur,
     onUploadFile,
+    fileUrl,
     identityLookup,
     domId,
   };
@@ -148,6 +156,7 @@ interface NodeContext {
   onChange: (fieldId: string, value: unknown) => void;
   onBlur?: (fieldId: string) => void;
   onUploadFile?: (field: FormField, file: File) => Promise<string>;
+  fileUrl?: (field: FormField, value: unknown) => string | undefined;
   identityLookup?: IdentityLookup;
   domId: (fieldId: string) => string;
 }
@@ -333,6 +342,7 @@ function InputField({
   onChange,
   onBlur,
   onUploadFile,
+  fileUrl,
   identityLookup,
   domId,
 }: NodeProps) {
@@ -377,7 +387,12 @@ function InputField({
     // map; their value comes straight off the model.
     control = <ReadOnlyValue id={inputId} value={value ?? field.value} computed />;
   } else if (isReadOnlyValue) {
-    control = <ReadOnlyValue id={inputId} value={displayValue(field, value, t)} />;
+    control =
+      field.type === "upload" ? (
+        <ReadOnlyUpload id={inputId} value={value} href={fileUrl?.(field, value)} />
+      ) : (
+        <ReadOnlyValue id={inputId} value={displayValue(field, value, t)} />
+      );
   } else if (field.type === "boolean") {
     // The question is the checkbox's own label, so there is exactly one label and
     // clicking the words toggles the box.
@@ -617,6 +632,35 @@ function CharacterCounter({
         ? t("form.charactersOver", { count: -remaining })
         : t("form.charactersLeft", { count: remaining })}
     </span>
+  );
+}
+
+/** A stored file that this task may look at but not replace. */
+function ReadOnlyUpload({
+  id,
+  value,
+  href,
+}: {
+  id: string;
+  value: unknown;
+  href: string | undefined;
+}) {
+  const t = useT();
+  const stored = parseStoredUpload(value);
+  const empty = !stored && (value === undefined || value === null || value === "");
+  const label = stored?.name ?? (empty ? "" : String(value));
+  if (empty) {
+    return <ReadOnlyValue id={id} value="" />;
+  }
+  if (!href) {
+    return <ReadOnlyValue id={id} value={t("form.upload.attached", { name: label })} />;
+  }
+  return (
+    <output className="tf-form__readonly tf-form__readonly--file" id={id} tabIndex={-1}>
+      <a className="tf-form__download" href={href} target="_blank" rel="noopener noreferrer">
+        {t("form.upload.download", { name: label })}
+      </a>
+    </output>
   );
 }
 

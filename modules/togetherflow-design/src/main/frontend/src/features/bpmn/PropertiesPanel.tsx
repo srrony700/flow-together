@@ -23,6 +23,7 @@ import {
   applyEventCondition,
   applyEventReference,
   applyTimer,
+  buildCondition,
   buildDocumentation,
   buildMultiInstance,
   DATA_OBJECT_TYPES,
@@ -31,6 +32,7 @@ import {
   eventDefinitionKindOf,
   isBoundaryEvent,
   isDataObject,
+  readCondition,
   readDataObjectType,
   readDataObjectValue,
   readDefaultFlow,
@@ -624,13 +626,15 @@ export function PropertiesPanel({
         />
       ) : null}
 
-      {type === "bpmn:SequenceFlow" ? (
+      {type === "bpmn:SequenceFlow" && moddle ? (
         <PropertyTextInput
           label={t("properties.condition")}
-          value={String(readCondition(business) ?? "")}
+          value={readCondition(business)}
           disabled={disabled}
           hint={t("properties.condition.hint")}
-          onCommit={(value) => onChange(element, { conditionExpression: conditionOf(value) })}
+          onCommit={(value) =>
+            onChange(element, { conditionExpression: buildCondition(moddle, value) })
+          }
         />
       ) : null}
 
@@ -979,24 +983,6 @@ export function PropertiesPanel({
       ) : null}
     </aside>
   );
-}
-
-/**
- * A sequence flow condition is a nested element, not an attribute, so it needs a
- * moddle object rather than a plain string.
- */
-function conditionOf(value: string): unknown {
-  const trimmed = value.trim();
-  if (trimmed === "") return undefined;
-  return {
-    $type: "bpmn:FormalExpression",
-    body: trimmed,
-  };
-}
-
-function readCondition(business: Record<string, unknown>): string | undefined {
-  const condition = business.conditionExpression as { body?: string } | undefined;
-  return condition?.body;
 }
 
 function isAsyncCapable(type: string): boolean {

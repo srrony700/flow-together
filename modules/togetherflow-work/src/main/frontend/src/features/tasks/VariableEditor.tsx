@@ -19,6 +19,8 @@ export interface VariableEditorProps {
   disabled?: boolean;
   /** Existing task variables can be edited but not renamed or removed. */
   allowAdd?: boolean;
+  /** Names locked after the employee task — shown, but not writable. */
+  lockedNames?: string[];
 }
 
 export function VariableEditor({
@@ -26,6 +28,7 @@ export function VariableEditor({
   onChange,
   disabled = false,
   allowAdd = true,
+  lockedNames = [],
 }: VariableEditorProps) {
   const t = useT();
 
@@ -45,6 +48,8 @@ export function VariableEditor({
         <ul className="tf-variables__list">
           {variables.map((variable, index) => {
             const error = validateVariable(variable);
+            const locked = lockedNames.includes(variable.name);
+            const rowDisabled = disabled || locked;
             return (
               <li className="tf-variables__row" key={index}>
                 <div className="tf-variables__name">
@@ -55,7 +60,7 @@ export function VariableEditor({
                     id={`var-name-${index}`}
                     className="tf-input"
                     value={variable.name}
-                    disabled={disabled}
+                    disabled={rowDisabled}
                     placeholder={t("variables.namePlaceholder")}
                     onChange={(event) => update(index, { name: event.target.value })}
                   />
@@ -68,7 +73,7 @@ export function VariableEditor({
                     id={`var-type-${index}`}
                     className="tf-input tf-select"
                     value={variable.type}
-                    disabled={disabled}
+                    disabled={rowDisabled}
                     onChange={(event) =>
                       update(index, { type: event.target.value as EditableVariableType })
                     }
@@ -92,7 +97,7 @@ export function VariableEditor({
                       className="tf-input tf-textarea"
                       rows={3}
                       value={variable.input}
-                      disabled={disabled}
+                      disabled={rowDisabled}
                       aria-invalid={Boolean(error) || undefined}
                       onChange={(event) => update(index, { input: event.target.value })}
                     />
@@ -101,7 +106,7 @@ export function VariableEditor({
                       id={`var-value-${index}`}
                       className="tf-input"
                       value={variable.input}
-                      disabled={disabled}
+                      disabled={rowDisabled}
                       aria-invalid={Boolean(error) || undefined}
                       onChange={(event) => update(index, { input: event.target.value })}
                     />
@@ -117,7 +122,7 @@ export function VariableEditor({
                     type="button"
                     className="tf-variables__remove"
                     onClick={() => remove(index)}
-                    disabled={disabled}
+                    disabled={rowDisabled}
                     aria-label={t("variables.remove", { name: variable.name || index + 1 })}
                   >
                     ×

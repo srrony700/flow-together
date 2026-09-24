@@ -15,10 +15,12 @@ import {
   applyEventCondition,
   applyEventReference,
   applyTimer,
+  buildCondition,
   buildDocumentation,
   buildMultiInstance,
   eventDefinitionKindOf,
   isBoundaryEvent,
+  readCondition,
   readDataObjectType,
   readDataObjectValue,
   readDefaultFlow,
@@ -499,6 +501,24 @@ describe("documentation", () => {
 
   it("is empty for an element that has none", () => {
     expect(readDocumentation({ $type: "bpmn:Task" })).toBe("");
+  });
+});
+
+describe("sequence-flow conditions", () => {
+  it("creates a moddle FormalExpression, not a bare $type object", () => {
+    const factory = fakeFactory();
+    const built = buildCondition(factory, " ${aseApproved == 'true'} ");
+    expect(factory.create).toHaveBeenCalledWith("bpmn:FormalExpression", {
+      body: "${aseApproved == 'true'}",
+    });
+    expect(built).toEqual({ $type: "bpmn:FormalExpression", body: "${aseApproved == 'true'}" });
+    expect(readCondition({ $type: "bpmn:SequenceFlow", conditionExpression: built })).toBe(
+      "${aseApproved == 'true'}",
+    );
+  });
+
+  it("writes nothing for a blank condition rather than an empty expression", () => {
+    expect(buildCondition(fakeFactory(), "   ")).toBeUndefined();
   });
 });
 

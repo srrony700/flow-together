@@ -9,6 +9,8 @@ import {
   flattenFields,
   formValuesToVariables,
   hasRenderableFields,
+  parseStoredUpload,
+  serialiseStoredUpload,
   initialValues,
   isOptionField,
   isSubmittable,
@@ -294,6 +296,17 @@ describe("formValuesToVariables", () => {
     expect(vars).toEqual([{ name: "x", type: "string", value: null }]);
   });
 
+  it("omits read-only fields so a later task cannot overwrite the original answers", () => {
+    const vars = formValuesToVariables(
+      model([
+        { id: "employeeId", type: "text", readOnly: true },
+        { id: "decision", type: "text" },
+      ]),
+      { employeeId: "E-1", decision: "true" },
+    );
+    expect(vars.map((item) => item.name)).toEqual(["decision"]);
+  });
+
   it("omits layout and expression fields", () => {
     const vars = formValuesToVariables(
       model([
@@ -319,6 +332,17 @@ describe("formValuesToVariables", () => {
       { inner: "v" },
     );
     expect(vars).toEqual([{ name: "inner", type: "string", value: "v" }]);
+  });
+});
+
+describe("stored uploads", () => {
+  it("round-trips the attachment id, owning task and file name", () => {
+    const stored = { id: "att-1", taskId: "task-9", name: "letter.pdf" };
+    expect(parseStoredUpload(serialiseStoredUpload(stored))).toEqual(stored);
+  });
+
+  it("ignores a bare attachment id — content URLs are task-scoped, so that is not enough", () => {
+    expect(parseStoredUpload("att-1")).toBeNull();
   });
 });
 

@@ -26,6 +26,7 @@ function renderForm(
     onChange?: (fieldId: string, value: unknown) => void;
     onSubmit?: () => void;
     onUploadFile?: (field: FormField, file: File) => Promise<string>;
+    fileUrl?: (field: FormField, value: unknown) => string | undefined;
   } = {},
 ) {
   const onChange = options.onChange ?? vi.fn();
@@ -40,6 +41,7 @@ function renderForm(
       onChange={onChange}
       onSubmit={options.onSubmit}
       onUploadFile={options.onUploadFile}
+      fileUrl={options.fileUrl}
     />,
   );
   return { ...result, onChange };
@@ -386,6 +388,21 @@ describe("upload", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Gateway unavailable");
     expect(onChange).toHaveBeenLastCalledWith("doc", undefined);
+  });
+
+  it("offers a download, not a replace control, when the field is read-only", () => {
+    const stored = JSON.stringify({ id: "att-1", taskId: "task-9", name: "letter.pdf" });
+    renderForm(
+      [{ id: "doc", name: "Resignation letter", type: "upload", readOnly: true }],
+      {
+        values: { doc: stored },
+        fileUrl: () => "/runtime/tasks/task-9/attachments/att-1/content",
+      },
+    );
+    const link = screen.getByRole("link", { name: /download letter\.pdf/i });
+    expect(link).toHaveAttribute("href", "/runtime/tasks/task-9/attachments/att-1/content");
+    expect(screen.queryByRole("button", { name: /remove/i })).not.toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).toBeNull();
   });
 });
 

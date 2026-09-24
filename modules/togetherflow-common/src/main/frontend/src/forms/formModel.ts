@@ -355,7 +355,7 @@ export function formValuesToVariables(
   const variables: RestVariable[] = [];
 
   for (const field of flattenFields(model.fields)) {
-    if (!isSubmittable(field)) continue;
+    if (!isSubmittable(field) || field.readOnly) continue;
     const raw = values[field.id];
 
     if (field.type === "boolean") {
@@ -388,6 +388,42 @@ export function formValuesToVariables(
   }
 
   return variables;
+}
+
+/**
+ * What an `upload` field stores: the attachment id plus the task that owns the
+ * bytes (content URLs are task-scoped) and the original file name for display.
+ */
+export interface StoredUpload {
+  id: string;
+  taskId: string;
+  name: string;
+}
+
+export function parseStoredUpload(value: unknown): StoredUpload | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "object" && value !== null && "id" in value && "taskId" in value) {
+    const record = value as { id?: unknown; taskId?: unknown; name?: unknown };
+    if (typeof record.id === "string" && typeof record.taskId === "string") {
+      return {
+        id: record.id,
+        taskId: record.taskId,
+        name: typeof record.name === "string" && record.name ? record.name : record.id,
+      };
+    }
+  }
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{")) return null;
+  try {
+    return parseStoredUpload(JSON.parse(trimmed) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+export function serialiseStoredUpload(upload: StoredUpload): string {
+  return JSON.stringify(upload);
 }
 
 function variableTypeFor(fieldType: string): string {

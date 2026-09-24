@@ -442,6 +442,25 @@ export function buildDocumentation(
   return [factory.create("bpmn:Documentation", { text })];
 }
 
+/**
+ * A sequence-flow condition must be a real moddle FormalExpression.
+ *
+ * A plain `{ $type, body }` object has no `$descriptor`, and `saveXML` then throws
+ * "Cannot read properties of undefined (reading 'isGeneric')" — which is how setting
+ * an exclusive-gateway condition made Save fail.
+ */
+export function buildCondition(factory: ModdleFactory, value: string): ModdleElement | undefined {
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  return factory.create("bpmn:FormalExpression", { body: trimmed });
+}
+
+export function readCondition(businessObject: BusinessObject): string {
+  const condition = businessObject.conditionExpression;
+  if (!condition || typeof condition !== "object") return "";
+  return String((condition as { body?: unknown }).body ?? "");
+}
+
 /* ── Script tasks ──────────────────────────────────────────────────────────── */
 
 /**

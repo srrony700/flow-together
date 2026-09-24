@@ -311,14 +311,58 @@ export class TaskApi {
    *
    * The plan calls this "the most-missed everyday affordance in the list", and it is not
    * an engine action — there is no "save" verb. It is a variable write against the task,
-   * which is exactly what completing would do minus the completion. `PUT /variables`
-   * create-or-updates each named variable and leaves the others alone.
+   * which is exactly what completing would do minus the completion.
+   *
+   * The collection resource does not accept PUT (verified against OpenAPI and
+   * `TaskVariableCollectionResource`: GET/POST/DELETE only). Create is POST on the
+   * collection; update is PUT on `/variables/{name}`. Posting a name that already
+   * exists 409s; putting a name that does not 404s. Scope has to match: `initiator`
+   * is global, and putting it as local is a miss.
    */
-  saveVariables(taskId: string, variables: RestVariable[]): Promise<RestVariable[]> {
-    return this.client.request(`/runtime/tasks/${encodeURIComponent(taskId)}/variables`, {
-      method: "PUT",
-      body: variables.map((variable) => ({ ...variable, scope: variable.scope ?? "local" })),
-    });
+  async saveVariables(taskId: string, variables: RestVariable[]): Promise<RestVariable[]> {
+    const byName = new Map<string, RestVariable>();
+    for (const variable of variables) {
+      const name = variable.name?.trim();
+      if (name) byName.set(name, { ...variable, name });
+    }
+    const unique = [...byName.values()];
+    if (unique.length === 0) return [];
+
+    const existing = await this.listVariables(taskId);
+    const existingByName = new Map(existing.map((variable) => [variable.name, variable]));
+
+    const created: RestVariable[] = [];
+    const updated: RestVariable[] = [];
+    const toCreate = new Map<string, RestVariable[]>();
+
+    for (const variable of unique) {
+      const current = existingByName.get(variable.name);
+      if (current) {
+        const scope = current.scope ?? variable.scope ?? "local";
+        updated.push(
+          await this.client.request(
+            `/runtime/tasks/${encodeURIComponent(taskId)}/variables/${encodeURIComponent(variable.name)}`,
+            { method: "PUT", body: { ...variable, scope } },
+          ),
+        );
+      } else {
+        const scope = variable.scope ?? "local";
+        const batch = toCreate.get(scope) ?? [];
+        batch.push({ ...variable, scope });
+        toCreate.set(scope, batch);
+      }
+    }
+
+    for (const batch of toCreate.values()) {
+      // The collection insists every variable in one POST shares a scope.
+      const result = await this.client.request<RestVariable[] | RestVariable>(
+        `/runtime/tasks/${encodeURIComponent(taskId)}/variables`,
+        { method: "POST", body: batch },
+      );
+      created.push(...(Array.isArray(result) ? result : [result]));
+    }
+
+    return [...updated, ...created];
   }
 
   listAttachments(taskId: string, signal?: AbortSignal): Promise<AttachmentResponse[]> {

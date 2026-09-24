@@ -230,6 +230,11 @@
 .tf-form__readonly--empty {
   color: var(--tf-text-muted);
 }
+.tf-form__download {
+  color: var(--tf-link, var(--tf-text));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 /* ── Checkboxes and radios ────────────────────────────────────────────────── */
 

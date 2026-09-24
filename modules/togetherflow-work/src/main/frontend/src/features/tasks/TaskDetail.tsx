@@ -17,6 +17,8 @@ import {
   formatDateTime,
   hasRenderableFields,
   initialValues,
+  parseStoredUpload,
+  serialiseStoredUpload,
   priorityLabel,
   toEditable,
   toRestVariables,
@@ -45,6 +47,17 @@ import { TaskPeople } from "./TaskPeople";
  * inside, and it namespaces the field ids the error summary links to.
  */
 const FORM_ID = "tf-task-form";
+
+/** Filled on Employee (MPE); later tasks may view these, never change them. */
+const EMPLOYEE_SNAPSHOT_VARIABLES = [
+  "initiator",
+  "employeeId",
+  "employeeName",
+  "resignationReason",
+  "lastWorkingDay",
+  "resignationLetterAttached",
+  "resignationLetter",
+];
 
 /** Flowable Work's four task tabs (W2.2). */
 type TaskTab = "task" | "people" | "subtasks" | "documents";
@@ -271,6 +284,8 @@ export function TaskDetail({
   const task = detail.data?.task;
   const isAssignedToMe = task?.assignee === userId;
   const isUnassigned = !task?.assignee;
+  const lockEmployeeSnapshot = task?.taskDefinitionKey !== "employeeSubmit";
+  const lockedVariableNames = lockEmployeeSnapshot ? EMPLOYEE_SNAPSHOT_VARIABLES : [];
 
   const runAction = useCallback(
     async (label: string, action: () => Promise<void>, then?: () => void) => {
@@ -545,6 +560,12 @@ export function TaskDetail({
                          * whichever store the deployment has configured (§7.6) rather than
                          * needing a content engine this distribution does not ship.
                          */
+                        fileUrl={(_field, value) => {
+                          const stored = parseStoredUpload(value);
+                          return stored
+                            ? taskApi.attachmentContentUrl(stored.taskId, stored.id)
+                            : undefined;
+                        }}
                         onUploadFile={async (field, file) => {
                           const attachment = await taskApi.uploadAttachment(current.id, file, {
                             name: file.name,
@@ -553,7 +574,11 @@ export function TaskDetail({
                             }),
                           });
                           reload();
-                          return attachment.id;
+                          return serialiseStoredUpload({
+                            id: attachment.id,
+                            taskId: current.id,
+                            name: file.name,
+                          });
                         }}
                       />
                     ) : (
@@ -573,6 +598,7 @@ export function TaskDetail({
                           variables={variables}
                           onChange={setVariables}
                           disabled={busy || !isAssignedToMe}
+                          lockedNames={lockedVariableNames}
                         />
                       </>
                     )}
@@ -591,6 +617,7 @@ export function TaskDetail({
                             variables={variables}
                             onChange={setVariables}
                             disabled={busy || !isAssignedToMe}
+                            lockedNames={lockedVariableNames}
                           />
                         ) : null}
                       </div>
