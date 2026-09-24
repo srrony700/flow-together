@@ -48,6 +48,7 @@ const OIDC = { authority: "https://idp.example.com/realms/Flowable", clientId: "
 afterEach(() => {
   vi.clearAllMocks();
   window.history.replaceState({}, "", "/");
+  window.sessionStorage.clear();
 });
 
 describe("AuthProvider — oidc mode", () => {
@@ -206,5 +207,62 @@ describe("AuthProvider — basic mode", () => {
         </AuthProvider>,
       ),
     ).not.toThrow();
+  });
+
+  it("restores a basic session after remount so a reload stays signed in", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [], total: 0, start: 0, size: 1 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const first = render(
+      <AuthProvider baseUrl="/process-api" mode="basic" fetchImpl={fetchImpl as never}>
+        <Probe />
+      </AuthProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "sign in" }));
+    await waitFor(() => expect(screen.getByTestId("user")).toHaveTextContent("alice"));
+    first.unmount();
+
+    render(
+      <AuthProvider baseUrl="/process-api" mode="basic" fetchImpl={fetchImpl as never}>
+        <Probe />
+      </AuthProvider>,
+    );
+    expect(screen.getByTestId("user")).toHaveTextContent("alice");
+    expect(screen.getByTestId("header")).toHaveTextContent(`Basic ${btoa("alice:secret")}`);
+  });
+
+  it("forgets the stored basic session on sign-out", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [], total: 0, start: 0, size: 1 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    render(
+      <AuthProvider baseUrl="/process-api" mode="basic" fetchImpl={fetchImpl as never}>
+        <Probe />
+      </AuthProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "sign in" }));
+    await waitFor(() => expect(screen.getByTestId("user")).toHaveTextContent("alice"));
+
+    await userEvent.click(screen.getByRole("button", { name: "sign out" }));
+    expect(screen.getByTestId("user")).toHaveTextContent("none");
+    expect(window.sessionStorage.getItem("togetherflow.basicSession")).toBeNull();
+  });
+
+  it("ignores a corrupt stored basic session rather than crashing", () => {
+    window.sessionStorage.setItem("togetherflow.basicSession", "{not-json");
+    render(
+      <AuthProvider baseUrl="/process-api" mode="basic">
+        <Probe />
+      </AuthProvider>,
+    );
+    expect(screen.getByTestId("user")).toHaveTextContent("none");
   });
 });

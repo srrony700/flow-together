@@ -439,16 +439,17 @@ function InputField({
             // The group's first option answers to the field's own id, so the error
             // summary and any other jump link land on the group.
             const optionId = index === 0 ? inputId : `${inputId}-${index}`;
+            const stored = optionStoredValue(option);
             return (
-              <label className="tf-check" htmlFor={optionId} key={option.id ?? option.name}>
+              <label className="tf-check" htmlFor={optionId} key={stored}>
                 <input
                   type="radio"
                   id={optionId}
                   name={inputId}
-                  value={option.name}
+                  value={stored}
                   disabled={disabled}
-                  checked={String(value ?? "") === option.name}
-                  onChange={() => onChange(field.id, option.name)}
+                  checked={optionSelected(option, value)}
+                  onChange={() => onChange(field.id, stored)}
                   onBlur={onBlur ? () => onBlur(field.id) : undefined}
                 />
                 <span className="tf-check__label">{option.name}</span>
@@ -697,7 +698,21 @@ function displayValue(field: FormField, value: unknown, t: TFunction): unknown {
     return value === true || value === "true" ? t("form.yes") : t("form.no");
   }
   if (field.type === "date") return toDateInputValue(value ?? field.value);
+  if (isOptionField(field) && value != null && value !== "") {
+    const match = (field.options ?? []).find((option) => optionSelected(option, value));
+    if (match) return match.name;
+  }
   return value ?? field.value;
+}
+
+/** The value written to the process variable: id when the author set one, else the label. */
+function optionStoredValue(option: { id?: string; name: string }): string {
+  return option.id || option.name;
+}
+
+function optionSelected(option: { id?: string; name: string }, value: unknown): boolean {
+  const stored = String(value ?? "");
+  return stored === optionStoredValue(option) || stored === option.name;
 }
 
 function hasOptions(field: OptionFormField): boolean {
@@ -749,11 +764,14 @@ function renderOptions(field: OptionFormField, ctx: OptionRenderContext): ReactN
       onBlur={ctx.onBlur ? () => ctx.onBlur?.(field.id) : undefined}
     >
       <option value="">{field.placeholder || ctx.t("form.choose")}</option>
-      {options.map((option) => (
-        <option key={option.id ?? option.name} value={option.name}>
-          {option.name}
-        </option>
-      ))}
+      {options.map((option) => {
+        const stored = optionStoredValue(option);
+        return (
+          <option key={stored} value={stored}>
+            {option.name}
+          </option>
+        );
+      })}
     </select>
   );
 }

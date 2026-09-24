@@ -21,7 +21,7 @@ import { ToastProvider } from "../components/Toast";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { I18nProvider, mergeCatalogues, type Catalogues } from "../i18n/I18nContext";
 import { ShortcutProvider } from "../shortcuts/ShortcutContext";
-import { RouterProvider } from "../routing/RouterContext";
+import { RouterProvider, useLocation } from "../routing/RouterContext";
 import { WorkspaceProvider } from "../workspace/WorkspaceContext";
 import { WorkspaceApi } from "../api/workspaces";
 import { ApiClient } from "../api/client";
@@ -77,7 +77,7 @@ export function AppRoot({ app, config, messages, children }: AppRootProps) {
                 the provider having to know a crash happened.
               */}
               <ShortcutProvider>
-                <ErrorBoundary boundary={app}>{children}</ErrorBoundary>
+                <AppErrorBoundary app={app}>{children}</AppErrorBoundary>
               </ShortcutProvider>
               </WorkspaceBridge>
             </ToastProvider>
@@ -85,6 +85,31 @@ export function AppRoot({ app, config, messages, children }: AppRootProps) {
         </AuthProvider>
       </RouterProvider>
     </I18nProvider>
+  );
+}
+
+/**
+ * Resets the crash screen when the user signs in or navigates.
+ *
+ * A throw on the first authenticated paint (chunk still settling, a race on the
+ * first query) used to wedge the whole tab on "This screen stopped working". The
+ * boundary's Reload then remounted the app *without* a session and dumped every
+ * module back on the login screen. Changing `resetKey` retries that first paint;
+ * the session itself now survives a real reload (see AuthContext).
+ */
+function AppErrorBoundary({
+  app,
+  children,
+}: {
+  app: keyof AppLinks;
+  children: ReactNode;
+}) {
+  const { path } = useLocation();
+  const { session } = useAuth();
+  return (
+    <ErrorBoundary boundary={app} resetKey={`${session?.userId ?? ""}:${path}`}>
+      {children}
+    </ErrorBoundary>
   );
 }
 

@@ -5,10 +5,12 @@
  *
  * - `oidc`   — production. Authorization Code + PKCE against the deployment's identity
  *              provider; tokens held in memory and renewed silently.
- * - `basic`  — local development only. HTTP Basic against the engine's REST layer,
- *              credentials in memory, lost on reload. Refuses to run over plain HTTP
- *              on a non-loopback host, because Basic replays a reusable credential on
- *              every request.
+ * - `basic`  — local development only. HTTP Basic against the engine's REST layer.
+ *              The session is kept in `sessionStorage` for the life of the tab so a
+ *              reload (or the error-boundary "Reload the page" button) does not bounce
+ *              back to the login screen. Closing the tab still signs out. Refuses to
+ *              run over plain HTTP on a non-loopback host, because Basic replays a
+ *              reusable credential on every request.
  *
  * Feature code never sees this distinction: it consumes `session` / `signIn` /
  * `signOut` and the API client consumes `getAuthHeaders`.
@@ -81,13 +83,15 @@ export function AuthProvider({
     assertBasicAuthIsSafe();
   }
 
-  const [session, setSession] = useState<Session | null>(null);
+  const restored = mode === "basic" ? readStoredBasicSession() : null;
+  const [session, setSession] = useState<Session | null>(restored);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isInitialising, setIsInitialising] = useState(mode === "oidc");
 
   // Held in a ref so the API client's header callback always reads the current
-  // token without every request re-subscribing to React state.
-  const authHeaderRef = useRef<string | null>(null);
+  // token without every request re-subscribing to React state. Seeded from the
+  // restored session so the first request after a reload is already authenticated.
+  const authHeaderRef = useRef<string | null>(restored?.authHeader ?? null);
 
   // Lazy state initialiser rather than a ref written during render: the manager must
   // be constructed exactly once, and mutating a ref mid-render is unsafe under
@@ -180,7 +184,9 @@ export function AuthProvider({
           body: { size: 1, candidateOrAssigned: userId },
         });
         authHeaderRef.current = authHeader;
-        setSession({ userId, authHeader });
+        const next = { userId, authHeader };
+        storeBasicSession(next);
+        setSession(next);
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
           throw new ApiError("Incorrect username or password.", 401, error.correlationId, error.body);
@@ -195,6 +201,7 @@ export function AuthProvider({
 
   const signOut = useCallback(() => {
     authHeaderRef.current = null;
+    storeBasicSession(null);
     setSession(null);
     if (mode === "oidc") {
       // End the IdP session too; otherwise the next sign-in silently reuses it and
@@ -231,6 +238,46 @@ export function useAuth(): AuthContextValue {
  * trivially interceptable. Loopback is allowed for local development; anything else
  * fails fast rather than shipping credentials in the clear.
  */
+const BASIC_SESSION_KEY = "togetherflow.basicSession";
+
+function readStoredBasicSession(): Session | null {
+  try {
+    const raw = window.sessionStorage.getItem(BASIC_SESSION_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const { userId, authHeader, displayName } = parsed as Partial<Session>;
+    if (
+      typeof userId !== "string" ||
+      !userId ||
+      typeof authHeader !== "string" ||
+      !authHeader.startsWith("Basic ")
+    ) {
+      return null;
+    }
+    return {
+      userId,
+      authHeader,
+      displayName: typeof displayName === "string" ? displayName : undefined,
+    };
+  } catch {
+    // Private windows and blocked site data throw; a corrupt value is the same as none.
+    return null;
+  }
+}
+
+function storeBasicSession(session: Session | null): void {
+  try {
+    if (session) {
+      window.sessionStorage.setItem(BASIC_SESSION_KEY, JSON.stringify(session));
+    } else {
+      window.sessionStorage.removeItem(BASIC_SESSION_KEY);
+    }
+  } catch {
+    // Remembering the session is a convenience; failing to is not worth an error.
+  }
+}
+
 function assertBasicAuthIsSafe(): void {
   if (typeof window === "undefined") return;
   const { protocol, hostname } = window.location;

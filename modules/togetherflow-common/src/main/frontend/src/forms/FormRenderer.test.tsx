@@ -164,6 +164,24 @@ describe("labelling", () => {
     expect(within(group).getAllByRole("radio")[0]).toHaveAttribute("id", "tf-test-form-reason");
   });
 
+  it("shows Yes/No and stores the option id so gateway conditions still see true/false", async () => {
+    const { onChange } = renderForm([
+      {
+        id: "aseApproved",
+        name: "Approve?",
+        type: "radio-buttons",
+        fieldType: "OptionFormField",
+        options: [
+          { id: "true", name: "Yes" },
+          { id: "false", name: "No" },
+        ],
+      },
+    ]);
+    await userEvent.click(screen.getByRole("radio", { name: "Yes" }));
+    expect(onChange).toHaveBeenCalledWith("aseApproved", "true");
+    expect(screen.getByRole("radio", { name: "No" })).toBeInTheDocument();
+  });
+
   it("labels a checkbox with the question itself instead of a hardcoded 'Yes'", async () => {
     const { onChange } = renderForm([{ id: "urgent", name: "Urgent", type: "boolean" }]);
 
